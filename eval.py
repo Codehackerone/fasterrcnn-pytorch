@@ -149,6 +149,8 @@ if __name__ == '__main__':
 
         target = []
         preds = []
+        features = []  # List to store the extracted features
+
         counter = 0
         for images, targets in tqdm(metric_logger.log_every(data_loader, 100, header), total=len(data_loader)):
             counter += 1
@@ -171,6 +173,12 @@ if __name__ == '__main__':
                 preds_dict['labels'] = outputs[i]['labels'].detach().cpu()
                 preds.append(preds_dict)
                 target.append(true_dict)
+                
+                # Extract image features
+                image_features = model.roi_heads.box_roi_pool(
+                    outputs[i]['boxes'], outputs[i]['features']
+                )
+                features.append(image_features)
             #####################################
 
             outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
@@ -181,9 +189,9 @@ if __name__ == '__main__':
         metric = MeanAveragePrecision(class_metrics=args['verbose'])
         metric.update(preds, target)
         metric_summary = metric.compute()
-        return metric_summary
+        return metric_summary, features
 
-    stats = evaluate(
+    stats, features = evaluate(
         model, 
         valid_loader, 
         device=DEVICE,
