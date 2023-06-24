@@ -139,6 +139,12 @@ if __name__ == '__main__':
         classes=None,
         colors=None
     ):
+
+        features = []
+        def save_features(mod, inp, outp):
+          features.append(outp)
+          torch.save(features, 'features.pt')
+
         n_threads = torch.get_num_threads()
         # FIXME remove this and make paste_masks_in_image run on the GPU
         torch.set_num_threads(1)
@@ -151,6 +157,12 @@ if __name__ == '__main__':
         preds = []
         features = []  # List to store the extracted features
 
+        # layer_to_hook = 'roi_heads'
+        layer_to_hook = 'rpn'
+        for name, layer in model.named_modules():
+          if name == layer_to_hook:
+            layer.register_forward_hook(save_features)
+                
         counter = 0
         for images, targets in tqdm(metric_logger.log_every(data_loader, 100, header), total=len(data_loader)):
             counter += 1
@@ -161,6 +173,17 @@ if __name__ == '__main__':
             model_time = time.time()
             with torch.no_grad():
                 outputs = model(images)
+
+                # layer_to_hook = 'roi_heads'
+                # for name, layer in model.named_modules():
+                #     if name == layer_to_hook:
+                #         layer.register_forward_hook(save_features)
+                # features_dict = model.backbone(images)  # Extract features from backbone
+                # features.append(features_dict)
+                # Extract image features before ROI pooling
+                # roi_features = model.roi_heads.box_roi_pool(
+                #     proposals, rpn_features
+                # )
 
             #####################################
             for i in range(len(images)):
@@ -175,23 +198,25 @@ if __name__ == '__main__':
                 target.append(true_dict)
                 
                 # Extract image features
-                image_features = model.roi_heads.box_roi_pool(
-                    outputs[i]['boxes'], outputs[i]['features']
-                )
-                features.append(image_features)
+                # image_features = model.roi_heads.box_roi_pool(
+                #     outputs[i]['boxes'], outputs[i]['features']
+                # )
+                # features.append(image_features)
+                # features.append(roi_features[i].detach().cpu())
             #####################################
 
             outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
 
         # gather the stats from all processes
+        print(features)
         metric_logger.synchronize_between_processes()
         torch.set_num_threads(n_threads)
         metric = MeanAveragePrecision(class_metrics=args['verbose'])
         metric.update(preds, target)
         metric_summary = metric.compute()
-        return metric_summary, features
+        return metric_summary#, features
 
-    stats, features = evaluate(
+    stats = evaluate(
         model, 
         valid_loader, 
         device=DEVICE,
