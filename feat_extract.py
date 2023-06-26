@@ -5,7 +5,7 @@ USAGE:
 python feat_extract.py --config data_configs/voc.yaml --weights outputs/training/fasterrcnn_convnext_small_voc_15e_noaug/best_model.pth --model fasterrcnn_convnext_small
 """
 from datasets import (
-    create_train_dataset, create_train_loader
+    create_valid_dataset, create_train_loader
 )
 from models.create_fasterrcnn_model import create_model
 from torch_utils import utils
@@ -122,7 +122,7 @@ if __name__ == '__main__':
             model = create_model(num_classes=NUM_CLASSES, coco_model=True)
         if coco_model:
             COCO_91_CLASSES = data_configs['COCO_91_CLASSES']
-            train_dataset = create_train_dataset(
+            train_dataset = create_valid_dataset(
                 TRAIN_DIR_IMAGES, 
                 TRAIN_DIR_LABELS, 
                 IMAGE_SIZE, 
@@ -135,7 +135,7 @@ if __name__ == '__main__':
         model = create_model(num_classes=NUM_CLASSES, coco_model=False)
         checkpoint = torch.load(args['weights'], map_location=DEVICE)
         model.load_state_dict(checkpoint['model_state_dict'])
-        train_dataset = create_train_dataset(
+        train_dataset = create_valid_dataset(
             TRAIN_DIR_IMAGES, 
             TRAIN_DIR_LABELS, 
             IMAGE_SIZE, 

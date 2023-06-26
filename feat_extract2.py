@@ -5,7 +5,7 @@ USAGE:
 python eval.py --config data_configs/voc.yaml --weights outputs/training/fasterrcnn_convnext_small_voc_15e_noaug/best_model.pth --model fasterrcnn_convnext_small
 """
 from datasets import (
-    create_valid_dataset, create_valid_loader
+    create_valid_dataset, create_valid_loader, create_train_dataset, create_train_loader
 )
 from models.create_fasterrcnn_model import create_model
 from torch_utils import utils
@@ -88,6 +88,8 @@ if __name__ == '__main__':
     except: # Else use the validation images.
         VALID_DIR_IMAGES = data_configs['VALID_DIR_IMAGES']
         VALID_DIR_LABELS = data_configs['VALID_DIR_LABELS']
+    TRAIN_DIR_IMAGES = data_configs['TRAIN_DIR_IMAGES']
+    TRAIN_DIR_LABELS = data_configs['TRAIN_DIR_LABELS']
     NUM_CLASSES = data_configs['NC']
     CLASSES = data_configs['CLASSES']
     NUM_WORKERS = args['workers']
@@ -113,6 +115,13 @@ if __name__ == '__main__':
                 COCO_91_CLASSES, 
                 square_training=args['square_training']
             )
+            train_dataset = create_train_dataset(
+            TRAIN_DIR_IMAGES,
+            TRAIN_DIR_LABELS,
+            IMAGE_SIZE,
+            CLASSES,
+            square_training=args['square_training']
+        )
 
     # Load weights.
     if args['weights'] is not None:
@@ -126,9 +135,18 @@ if __name__ == '__main__':
             CLASSES,
             square_training=args['square_training']
         )
+        train_dataset = create_train_dataset(
+            TRAIN_DIR_IMAGES,
+            TRAIN_DIR_LABELS,
+            IMAGE_SIZE,
+            CLASSES,
+            square_training=args['square_training']
+        )
+            
     model.to(DEVICE).eval()
     
     valid_loader = create_valid_loader(valid_dataset, BATCH_SIZE, NUM_WORKERS)
+    train_loader = create_train_loader(train_dataset, BATCH_SIZE, NUM_WORKERS)
 
     @torch.inference_mode()
     def evaluate(
@@ -143,7 +161,7 @@ if __name__ == '__main__':
         features = []
         def save_features(mod, inp, outp):
           features.append(outp)
-          torch.save(features, 'features.pt')
+          torch.save(features, 'features_fc7.pt')
 
         n_threads = torch.get_num_threads()
         # FIXME remove this and make paste_masks_in_image run on the GPU
@@ -218,35 +236,7 @@ if __name__ == '__main__':
 
     stats = evaluate(
         model, 
-        valid_loader, 
+        train_loader, 
         device=DEVICE,
         classes=CLASSES,
     )
-
-    print('\n')
-    pprint(stats)
-    if args['verbose']:
-        print('\n')
-        pprint(f"Classes: {CLASSES}")
-        print('\n')
-        print('AP / AR per class')
-        empty_string = ''
-        if len(CLASSES) > 2: 
-            num_hyphens = 73
-            print('-'*num_hyphens)
-            print(f"|    | Class{empty_string:<16}| AP{empty_string:<18}| AR{empty_string:<18}|")
-            print('-'*num_hyphens)
-            class_counter = 0
-            for i in range(0, len(CLASSES)-1, 1):
-                class_counter += 1
-                print(f"|{class_counter:<3} | {CLASSES[i+1]:<20} | {np.array(stats['map_per_class'][i]):.3f}{empty_string:<15}| {np.array(stats['mar_100_per_class'][i]):.3f}{empty_string:<15}|")
-            print('-'*num_hyphens)
-            print(f"|Avg{empty_string:<23} | {np.array(stats['map']):.3f}{empty_string:<15}| {np.array(stats['mar_100']):.3f}{empty_string:<15}|")
-        else:
-            num_hyphens = 62
-            print('-'*num_hyphens)
-            print(f"|Class{empty_string:<10} | AP{empty_string:<18}| AR{empty_string:<18}|")
-            print('-'*num_hyphens)
-            print(f"|{CLASSES[1]:<15} | {np.array(stats['map']):.3f}{empty_string:<15}| {np.array(stats['mar_100']):.3f}{empty_string:<15}|")
-            print('-'*num_hyphens)
-            print(f"|Avg{empty_string:<12} | {np.array(stats['map']):.3f}{empty_string:<15}| {np.array(stats['mar_100']):.3f}{empty_string:<15}|")
